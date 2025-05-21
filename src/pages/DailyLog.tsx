@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react' // Added useEffect
 import { useForm } from 'react-hook-form'
+import { saveLog } from '../lib/mockApi' // Import saveLog
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Button } from '@/components/ui/button'
@@ -22,24 +23,47 @@ type FormValues = z.infer<typeof formSchema>
 
 export default function DailyLog() {
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submissionStatus, setSubmissionStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [submissionMessage, setSubmissionMessage] = useState<string | null>(null)
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       notes: ''
+      // Initialize other fields if necessary, or let Zod handle defaults if specified in schema
     }
   })
 
+  // Clear submission message when user starts editing the form again
+  useEffect(() => {
+    if (form.formState.isDirty && submissionStatus !== 'idle') {
+      setSubmissionStatus('idle')
+      setSubmissionMessage(null)
+    }
+  }, [form.formState.isDirty, submissionStatus, form])
+
   const onSubmit = async (data: FormValues) => {
     setIsSubmitting(true)
+    setSubmissionStatus('idle') // Reset status at the beginning of new submission
+    setSubmissionMessage(null)
+
     try {
-      // Here we'll add the API call later
-      console.log('Form data:', data)
-      alert('Logg lagret!')
-      form.reset()
+      await saveLog(data)
+      setSubmissionStatus('success')
+      setSubmissionMessage('Loggen er lagret!')
+      form.reset() // Reset the form fields to defaultValues
+      // DefaultValues are re-applied, isDirty becomes false.
+
+      setTimeout(() => {
+        setSubmissionStatus('idle')
+        setSubmissionMessage(null)
+      }, 3000) // Clear success message after 3 seconds
     } catch (error) {
-      console.error('Error saving log:', error)
-      alert('Kunne ikke lagre loggen. Prøv igjen senere.')
+      // console.error('Error saving log:', error)
+      const errorMessage = error instanceof Error ? error.message : 'En ukjent feil oppstod.'
+      setSubmissionStatus('error')
+      setSubmissionMessage(`Kunne ikke lagre loggen: ${errorMessage}. Prøv igjen senere.`)
+      // Error messages persist until next submission attempt or form interaction
     } finally {
       setIsSubmitting(false)
     }
@@ -141,6 +165,16 @@ export default function DailyLog() {
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? 'Lagrer...' : 'Lagre Logg'}
           </Button>
+
+          {submissionMessage && (
+            <div
+              className={`mt-4 p-3 rounded-md text-sm ${
+                submissionStatus === 'success' ? 'bg-green-100 text-green-700' : ''
+              } ${submissionStatus === 'error' ? 'bg-red-100 text-red-700' : ''}`}
+            >
+              {submissionMessage}
+            </div>
+          )}
         </form>
       </Form>
     </div>
